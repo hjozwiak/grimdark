@@ -66,10 +66,11 @@ Virus and Threat Protection, tab over to "manage settings", hit that, then tab o
 
 ### Linux (Proton, experimental)
 
-The same launcher runs inside Grim Dawn's Proton prefix. This is new and much less tested than Windows; in
-particular there is **no speech on Linux yet** (prism finds no screen reader to talk to inside Wine, and the
-Windows OneCore voices the in-world speech uses do not exist there), so you get the mod's sounds but nothing
-spoken.
+The same launcher runs inside Grim Dawn's Proton prefix. This is new and much less tested than Windows.
+Speech works through Prism's Wine bridges, which are in the mod folder: with Orca or Speech Dispatcher running
+on the host, menus and windows speak through it like NVDA does on Windows (step 4 wires that up). What does not
+work yet is the positional Mark/Zira combat speech, which is synthesized with Windows OneCore voices that do
+not exist under Wine; the mod's sounds are unaffected.
 
 1. Run Grim Dawn once from Steam so Proton creates its prefix (`steamapps/compatdata/219990`).
 2. Install the mod into that prefix by running the installer in it, for example
@@ -90,6 +91,14 @@ spoken.
    loses its display at the title screen. (Protontricks is fine for installing, step 2.) Adding `gdlaunch.exe`
    as a non-Steam game with Proton forced and `STEAM_COMPAT_DATA_PATH=<the path above> %command%` in its launch
    options should do the same job as the command, but the command is the tested path.
+
+4. For speech, the Wine side also needs to find the bridge payload's host half. The mod folder has a `wine`
+   subfolder; prefix it to `WINEDLLPATH` in the launch command (the mod folder's path on the Unix side, e.g.
+   `WINEDLLPATH="$HOME/.local/share/Steam/steamapps/compatdata/219990/pfx/drive_c/users/steamuser/AppData/Local/Programs/Grimdark/wine"`),
+   and have Orca or Speech Dispatcher running in the same desktop session before you start. The log's line
+   `speech: using backend 'Orca'` (or `'Speech Dispatcher'`) in `grimdark.log` confirms it connected;
+   `speech: no usable backend` means it did not (check the path and that the service is up). The three
+   `prism_*_bridge.dll` files next to `prism.dll` are the bridges' other half; leave them there.
 
 The launcher finds the game through the prefix's own Steam records, notices Steam's Proton environment instead
 of looking for a Windows `steam.exe` process it cannot see from inside Wine, and leaves the real Steam
@@ -401,7 +410,7 @@ api.github.com for the update check, dev only: `nonexistent.invalid` tests the o
   install ships no Ninja of its own, so put one on PATH in that case.
 - The build links the C runtime statically, so a player needs no Visual C++ redistributable; only `prism.dll` has to sit
   next to `grimdark.dll`.
-- No other downloads: the prism speech SDK (the x64 headers, import library and `prism.dll` of release v0.18.1),
+- No other downloads: the prism speech SDK (the x64 headers, import library and `prism.dll` of release v0.18.3, plus its Wine bridge payload),
   Detours, miniaudio, SQLite, doctest, the room database and the audio assets are all in the repo.
 
 From the repo root, in any shell:

@@ -1,0 +1,4 @@
+# Upstream release assets this vendoring was taken from (github.com/ethindp/prism/releases/tag/v0.18.3);
+# the digests are the release's own, verified at download time (2026-10-31).
+13d3c9d1d524b0737cde261c6468845753e36b6c5c2637e7d26bfb8bf4d8783f  prism-windows-x64.zip
+2b3050c89eaa4fb6c452377ec155ec7b71f444b424b547e04da238575d98a31c  prism-linux-x64.zip

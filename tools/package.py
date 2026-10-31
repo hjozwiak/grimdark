@@ -6,6 +6,8 @@ Layout inside the zip (one top-level folder, so unzipping anywhere gives a self-
 
     grimdark/
       gdlaunch.exe (the player runs this), grimdark.dll, prism.dll, gdinject.exe (dev: inject into a running game)
+      prism_*_bridge.dll (Wine bridge placeholders, inert on Windows) and wine/ (their host .dll.so halves,
+                       for speech under Linux/Proton via WINEDLLPATH)
       assets/          audio/... from the repo + rooms.db, rooms_base.db built by CMake from data/rooms
                        (the DLL loads these from next to itself)
       README.md, LICENSE, THIRD_PARTY.md
@@ -17,7 +19,7 @@ build's grimdark.pdb must be kept to symbolize a tester's log). No Python depend
 import argparse, os, shutil, sys, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PRISM = os.path.join(ROOT, "third_party", "prism-bin", "prism-sdk-v0.18.1")
+PRISM = os.path.join(ROOT, "third_party", "prism-bin", "prism-sdk-v0.18.3")
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -47,6 +49,9 @@ def main():
 
     for name in ("gdlaunch.exe", "grimdark.dll", "prism.dll", "gdinject.exe"):
         add("grimdark/" + name, os.path.join(a.build, name))
+    for name in sorted(os.listdir(os.path.join(PRISM, "wine", "placeholders"))):   # CMake copies these next to the DLL too; ship from the SDK so the zip never depends on build-dir state
+        add("grimdark/" + name, os.path.join(PRISM, "wine", "placeholders", name))
+    add_tree("grimdark/wine", os.path.join(PRISM, "wine"))
     add_tree("grimdark/assets", os.path.join(ROOT, "assets"))   # the repo copy, not the build's mirror of it
     for name in ("rooms.db", "rooms_base.db"):   # build products (tools/rooms_pack.py build, run by CMake)
         add("grimdark/assets/" + name, os.path.join(a.build, "assets", name))

@@ -29,11 +29,15 @@ target_compile_definitions(sqlite3 PRIVATE SQLITE_THREADSAFE=1 SQLITE_OMIT_LOAD_
 target_compile_options(sqlite3 PRIVATE /W0)
 
 # --- Prism (prebuilt SDK release) ---
-set(PRISM_SDK ${CMAKE_SOURCE_DIR}/third_party/prism-bin/prism-sdk-v0.18.1)
+set(PRISM_SDK ${CMAKE_SOURCE_DIR}/third_party/prism-bin/prism-sdk-v0.18.3)
 set(PRISM_BIN ${PRISM_SDK}/windows/x64/dynamic/release)
 set(PRISM_LIB ${PRISM_BIN}/lib/prism.lib)
 set(PRISM_DLL ${PRISM_BIN}/bin/prism.dll)
-if(NOT EXISTS ${PRISM_LIB} OR NOT EXISTS ${PRISM_DLL})
+# Prism's Wine bridges (same release, from the Linux build): the placeholder .dll files sit next to prism.dll so
+# Wine finds them through its DLL search path, the host .dll.so halves go in wine/ for WINEDLLPATH (docs/devlog
+# 2026-10-31). Inert on native Windows: prism only touches them after its own wine_get_version check.
+set(PRISM_WINE ${PRISM_SDK}/wine)
+if(NOT EXISTS ${PRISM_LIB} OR NOT EXISTS ${PRISM_DLL} OR NOT EXISTS ${PRISM_WINE}/prism_speech_dispatcher_bridge.dll.so)
   message(FATAL_ERROR "prism SDK not found under ${PRISM_BIN}")
 endif()
 get_filename_component(PRISM_DLL_NAME ${PRISM_DLL} NAME)
@@ -83,6 +87,8 @@ target_link_options(grimdark PRIVATE /DELAYLOAD:${PRISM_DLL_NAME}
 target_compile_definitions(grimdark PRIVATE PRISM_DLL_NAME="${PRISM_DLL_NAME}")
 add_custom_command(TARGET grimdark POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PRISM_DLL} $<TARGET_FILE_DIR:grimdark>
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${PRISM_WINE}/placeholders $<TARGET_FILE_DIR:grimdark>
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${PRISM_WINE} $<TARGET_FILE_DIR:grimdark>/wine
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:grimdark>/assets)
 
 # --- the rooms databases: built from data/rooms (git-friendly text + compressed grids) by tools/rooms_pack.py ---

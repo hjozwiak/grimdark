@@ -1331,3 +1331,21 @@ true)` then the drop or (after our own no/yes picker) the destroy. Verified live
   prism reports "no usable backend" inside Wine and OneCore degrades to a dummy voice; miniaudio output works.
   gdlaunch's console output is swallowed when it is started through `wine start` or Proton's entry (both
   redirect it), so on Linux the log file in the prefix is the tail to read.
+
+## 2026-10-31 (later): Prism Wine bridges -- speech under Proton
+- The "no speech on Linux" above was Prism v0.18.1's Windows build, not Wine: its registry (probed with a tiny
+  Prism client under Wine) lists 12 backends and no Orca/Speech Dispatcher -- `cmake/PrismBackends.cmake` at
+  v0.18.1 declares those backends PLATFORM UNIX only, so the `_WIN32` bridge half in speech_dispatcher.cpp /
+  orca.cpp never compiled into prism.dll (the bridge delay imports are there, the backends are not). Fixed
+  upstream at v0.18.3 (PLATFORM UNIX WINDOWS); the vendored SDK is upgraded to the official v0.18.3 release
+  (export table identical to v0.18.1's 59 names; header delta is one optional PrismConfig callback +
+  PRISM_CONFIG_VERSION 4; SHA256SUMS.release records the asset digests).
+- Verified end to end on this machine: official bridge payload (placeholders beside prism.dll, .dll.so via
+  WINEDLLPATH; also built the winelibs from source to confirm the payload shape). Probe exe under Wine:
+  Speech Dispatcher runtime-supported, initialize/speak OK against the user's running speech-dispatcher; same
+  for Orca. In game (Proton-entry chain, WINEDLLPATH preserved by the proton script; protontricks overwrites
+  WINEDLLPATH, one more mark against it): the mod log's `speech: using backend 'Orca'` -- create_best picked
+  Orca (priority 100 over Speech Dispatcher's 97; both are running on this host). CMake copies placeholders +
+  wine/ next to the DLL, tools/package.py ships both; the placeholders are inert on native Windows (prism calls
+  them only past its wine_get_version check). Still to do by ear: a spoken line in an actual play session, and
+  the Mark/Zira positional voices, which stay OneCore/Windows-only.

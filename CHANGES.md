@@ -1,3 +1,7 @@
+# Unreleased
+
+- Experimental Linux support: the launcher now works inside Grim Dawn's Proton prefix. It finds the game through the prefix's Steam records, recognises that Steam is running from Proton's environment instead of wrongly insisting Steam is closed, and no longer overwrites Steam's own launch values. See "Linux (Proton, experimental)" in the README's Setup for how to start it. There is no speech on Linux yet, only the mod's sounds.
+
 # 0.6.0 (2026-10-26)
 
 - Telegraph cues are more accurate:

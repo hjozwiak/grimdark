@@ -13,16 +13,22 @@
 // Steam: the game is started the way GDCommunityLauncher does it -- the environment block the Steam client sets
 // for a game it launches (SteamAppId etc.) is faked, so the SteamStub wrapper does not relaunch through Steam,
 // and steam_api connects to the running client over IPC as usual (achievements, cloud saves). Steam must be
-// running for that, which is checked first.
+// running for that, which is checked first. Under Linux/Proton the same binary runs inside the game's Wine
+// prefix: the prefix's registry answers the SteamPath query with a stub whose libraryfolders.vdf names the S:
+// game drive, so the discovery walk below works unchanged; what differs is the Steam-alive check (a native
+// client's process is invisible from inside Wine) and the environment (Proton sets the real values first) --
+// both decided by core/steam_launch.h over the probes gathered below.
 #include <windows.h>
 #include <shlobj.h>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
 #include "../inject/inject_common.h"
 #include "core/game_settings.h"
+#include "core/steam_launch.h"
 
 namespace {
 const wchar_t* kAppId = L"219990";
@@ -56,8 +62,24 @@ std::wstring widen(const std::string& s) {
   return out;
 }
 
+std::string narrow(const std::wstring& s) {
+  if (s.empty()) return {};
+  int n = WideCharToMultiByte(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0, nullptr, nullptr);
+  std::string out(n, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, s.data(), (int)s.size(), out.data(), n, nullptr, nullptr);
+  return out;
+}
+
+std::wstring env_var(const wchar_t* name) {
+  DWORD n = GetEnvironmentVariableW(name, nullptr, 0);
+  if (!n) return {};
+  std::wstring out(n, L'\0');
+  out.resize(GetEnvironmentVariableW(name, out.data(), n));
+  return out;
+}
+
 std::string read_file(const std::wstring& p) {
-  std::ifstream f(p, std::ios::binary);
+  std::ifstream f(std::filesystem::path(p), std::ios::binary);   // path(wstring), not ifstream(wstring): the latter is an MSVC-only overload
   return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 
@@ -123,18 +145,40 @@ std::wstring find_game(const std::wstring& arg) {
   return {};
 }
 
+// Under Wine/Proton the process list only holds the Wine session's processes, so a running native Steam is
+// invisible to find_pid; core/steam_launch.h decides over these probes instead (measured 2026-10-31).
+gd::core::steam_launch::Probes steam_probes() {
+  namespace sl = gd::core::steam_launch;
+  sl::Probes p;
+  HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  p.under_wine = ntdll && GetProcAddress(ntdll, "wine_get_version") != nullptr;   // exported by Wine's ntdll only
+  p.steam_exe_running = find_pid(L"steam.exe") != 0;
+  for (const wchar_t* name : {L"SteamAppId", L"STEAM_COMPAT_APP_ID", L"STEAM_APPID"}) {
+    p.env_app_id = narrow(env_var(name));
+    if (!p.env_app_id.empty()) break;
+  }
+  p.compat_data_path = narrow(env_var(L"STEAM_COMPAT_DATA_PATH"));
+  if (p.under_wine && !p.steam_exe_running) {   // Proton writes this key into the prefix it prepared for Steam
+    wchar_t buf[MAX_PATH]; DWORD n = sizeof buf;
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Valve\\Steam\\ActiveProcess", L"SteamClientDll64", RRF_RT_REG_SZ, nullptr, buf, &n) == ERROR_SUCCESS)
+      p.active_process_dll = file_exists(buf);
+  }
+  return p;
+}
+
 // What the Steam client puts in a game's environment (GDCommunityLauncher's list): the SteamStub wrapper and
-// steam_api then treat the process as Steam-launched instead of relaunching it through Steam.
+// steam_api then treat the process as Steam-launched instead of relaunching it through Steam. Only absent
+// variables are filled (core/steam_launch.h): under Proton the real values arrive first and must survive.
 void fake_steam_environment() {
-  const wchar_t* vars[][2] = {
-    {L"SteamEnv", L"1"}, {L"SteamClientLaunch", L"1"},
-    {L"SteamGameId", kAppId}, {L"SteamAppId", kAppId}, {L"SteamOverlayGameId", kAppId},
-    {L"SteamAppUser", L"username"}, {L"SteamUser", L"username"}, {L"STEAMID", L"00000000000000000"},
-    {L"SESSIONNAME", L"Console"},
-  };
-  for (auto& v : vars) SetEnvironmentVariableW(v[0], v[1]);
-  PWSTR docs = nullptr;
-  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &docs))) { SetEnvironmentVariableW(L"USER_MYDOCS", docs); CoTaskMemFree(docs); }
+  std::map<std::string, std::string> current;
+  for (const auto& kv : gd::core::steam_launch::env_fill_plan({}, "x"))   // the table's names
+    current[kv.first] = narrow(env_var(widen(kv.first).c_str()));
+  for (const auto& kv : gd::core::steam_launch::env_fill_plan(current, narrow(kAppId)))
+    SetEnvironmentVariableW(widen(kv.first).c_str(), widen(kv.second).c_str());
+  if (env_var(L"USER_MYDOCS").empty()) {
+    PWSTR docs = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &docs))) { SetEnvironmentVariableW(L"USER_MYDOCS", docs); CoTaskMemFree(docs); }
+  }
 }
 
 std::wstring log_path() {
@@ -244,9 +288,12 @@ int wmain(int argc, wchar_t** argv) {
   }
   printf("Game: %ls\n", exe.c_str());
 
-  if (!find_pid(L"steam.exe")) return fail(L"Steam is not running", L"Start Steam, sign in, and then run Grimdark again. The game needs Steam running in the background.");
+  gd::core::steam_launch::Probes probes = steam_probes();
+  gd::core::steam_launch::Verdict steam = gd::core::steam_launch::decide(probes, narrow(kAppId));
+  if (!steam.steam_alive) return fail(L"Steam is not running", L"Start Steam, sign in, and then run Grimdark again. The game needs Steam running in the background.");
   if (find_pid(L"Grim Dawn.exe")) return fail(L"Grim Dawn is already running", L"Close the running game first (the mod has to be loaded before the game starts), then run Grimdark again.");
-  printf("Steam is running.\n");
+  if (steam.signal == gd::core::steam_launch::Signal::SteamExe) printf("Steam is running.\n");
+  else printf("Steam is running (%s).\n", steam.reason);
 
   force_game_settings(dry);
   if (dry) { printf("Dry run: would start the game with %ls\n", dll.c_str()); return 0; }

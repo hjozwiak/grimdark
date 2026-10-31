@@ -1301,3 +1301,33 @@ true)` then the drop or (after our own no/yes picker) the destroy. Verified live
   telegraph's own mode/shape gates) arms its effect for 3 s; a new entity with that record in the sweep is tracked as a
   slow projectile owned by the caster (straight-line accent, 2.5 u zone; no ProjectileBase reads). Ownerless, so the
   cast is the attribution: groundripper_fx01 is also a player relic's beam groundEffect.
+
+## 2026-10-31: gdlaunch under Linux/Proton
+- The user ran the installed v0.6.0 launcher from inside compatdata/219990's prefix (`protontricks-launch --appid
+  219990 gdlaunch.exe`) and got gdlaunch's own "Steam is not running" box with Linux Steam up. Reproduced under
+  Xvfb: game discovery works in-prefix unchanged (prefix registry SteamPath names Proton's stub
+  `C:\Program Files (x86)\Steam`, whose libraryfolders.vdf lists the library root, seen as both `S:\` and the
+  `Z:\` form across runs), then `find_pid(L"steam.exe")` fails: a Toolhelp snapshot inside Wine lists only that
+  wineserver's processes, and protontricks-launch (`wine start /wait`, per its util.py) never starts Proton's
+  steam.exe shim. Through Proton's real entry (`proton waitforexitandrun`) the shim runs and the stock check passed.
+- Fix: `src/core/steam_launch.h` (engine-free, doctested) decides over probes gdlaunch gathers -- Wine detection
+  via ntdll's `wine_get_version` export; under Wine only, the shim process, an env app id (SteamAppId /
+  STEAM_COMPAT_APP_ID / STEAM_APPID), a STEAM_COMPAT_DATA_PATH ending in this app id, or the prefix's
+  ActiveProcess SteamClientDll64 each prove Steam. Native Windows still requires steam.exe. The faked-Steam
+  environment is now fill-if-absent (`env_fill_plan`), so real SteamUser/STEAMID from a Proton launch survive;
+  USER_MYDOCS likewise. One pre-existing MSVC-ism (`ifstream(wstring)`) became `ifstream(filesystem::path)` so
+  mingw-w64 can cross-build gdlaunch for on-Linux testing (the shipped binary is still MSVC/CI).
+- Full-run evidence matrix (all Xvfb 1920x1080, game options 1920x1080 fullscreen): vanilla game + SteamAppId via
+  protontricks stable 100 s. Any gdlaunch-spawned game via protontricks dies at the title screen
+  (DXVK VK_ERROR_SURFACE_LOST_KHR, then XIO 110) at ~10-15 s -- with the real DLL, an inert DLL, injection
+  skipped, CREATE_SUSPENDED removed, and a GUI-subsystem launcher; the launcher itself outlives the game. The
+  same spawn via `proton waitforexitandrun` is stable 100+ s (stock MSVC and mingw launchers) -- so
+  protontricks-launch is not a viable gdlaunch chain (README documents the Proton-entry command instead), while
+  suspended spawn + remote LoadLibrary injection under Wine works: the DLL initialized fully in the protontricks
+  run (version gate matched 1.3.1.1, all hook passes, rooms db, title-screen frame texts).
+- Not yet proven: arrival at the main menu under the Proton-entry chain -- in the bare-CLI harness (no Steam
+  runtime container, Xvfb, muted pulse) the game's log stalls after the DLL's second hook pass for 240 s with
+  host Steam running. Needs a try through Steam's own Play path on a real desktop. Speech on Linux: none --
+  prism reports "no usable backend" inside Wine and OneCore degrades to a dummy voice; miniaudio output works.
+  gdlaunch's console output is swallowed when it is started through `wine start` or Proton's entry (both
+  redirect it), so on Linux the log file in the prefix is the tail to read.

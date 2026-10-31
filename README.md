@@ -64,6 +64,37 @@ You will also need to add an exception in Defender or your antivirus of choice f
 the path by right clicking the desktop icon and going to properties.  To do this for Defender, go to Windows Security ->
 Virus and Threat Protection, tab over to "manage settings", hit that, then tab over to "add or remove exclusions".
 
+### Linux (Proton, experimental)
+
+The same launcher runs inside Grim Dawn's Proton prefix. This is new and much less tested than Windows; in
+particular there is **no speech on Linux yet** (prism finds no screen reader to talk to inside Wine, and the
+Windows OneCore voices the in-world speech uses do not exist there), so you get the mod's sounds but nothing
+spoken.
+
+1. Run Grim Dawn once from Steam so Proton creates its prefix (`steamapps/compatdata/219990`).
+2. Install the mod into that prefix by running the installer in it, for example
+   `protontricks-launch --appid 219990 GrimdarkInstaller.exe`. It installs to the same per-user folder as on
+   Windows, inside the prefix.
+3. With Steam running, start the game through Proton's own entry point, pointing it at the launcher inside the
+   prefix (adjust the Steam path and the Proton version folder to yours):
+
+   ```
+   STEAM_COMPAT_DATA_PATH="$HOME/.local/share/Steam/steamapps/compatdata/219990" \
+   STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.local/share/Steam" \
+   SteamAppId=219990 SteamGameId=219990 \
+   "$HOME/.local/share/Steam/steamapps/common/Proton - Experimental/proton" waitforexitandrun \
+   'C:\users\steamuser\AppData\Local\Programs\Grimdark\gdlaunch.exe'
+   ```
+
+   Do not start `gdlaunch.exe` with `protontricks-launch` itself: that chain was tested and the game it spawns
+   loses its display at the title screen. (Protontricks is fine for installing, step 2.) Adding `gdlaunch.exe`
+   as a non-Steam game with Proton forced and `STEAM_COMPAT_DATA_PATH=<the path above> %command%` in its launch
+   options should do the same job as the command, but the command is the tested path.
+
+The launcher finds the game through the prefix's own Steam records, notices Steam's Proton environment instead
+of looking for a Windows `steam.exe` process it cannot see from inside Wine, and leaves the real Steam
+environment values alone. Without those it refuses with "Steam is not running" even when Steam is up.
+
 ## Getting Started
 
 The control scheme is a hybrid of a standard ARPG's and a few others. The game here is that you run around and hit

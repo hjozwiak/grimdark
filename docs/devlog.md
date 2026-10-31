@@ -1349,3 +1349,18 @@ true)` then the drop or (after our own no/yes picker) the destroy. Verified live
   wine/ next to the DLL, tools/package.py ships both; the placeholders are inert on native Windows (prism calls
   them only past its wine_get_version check). Still to do by ear: a spoken line in an actual play session, and
   the Mark/Zira positional voices, which stay OneCore/Windows-only.
+
+## 2026-10-31 (evening): the Proton init stall was a loader-lock deadlock in attach_all
+- Playing through the wrapper reproduced the harness stall on the real desktop: log stops after "version:",
+  game idle. Instrumented attach_all (local clang-cl build) pinned it: passes die inside the attach loop at
+  `GetModuleHandleA` -- which takes the loader lock -- while ThreadUpdater has every other thread suspended,
+  including the still-loading game thread holding that lock. Which pass died varied run to run (a race).
+- Fix (hooks.cpp): resolve all targets (GetModuleHandleA/GetProcAddress/stub+dup checks) BEFORE
+  DetourTransactionBegin; inside the transaction only DetourAttach pre-resolved addresses. Latent on native
+  Windows too, just harder to lose; no behavior change otherwise. After the fix, 7 of 8 headless Proton-entry
+  runs reach the title screen (one still stalled pre-hooks -- same symptom class, not yet pinned; the game
+  thread holds the loader lock unaided during early load, so even resolution can wait on it).
+- Local build route (no Windows box): clang-cl + lld-link against an xwin-splatted MSVC SDK
+  (INCLUDE/LIB env, llvm-rc for RC, /EHsc, debug-CRT aliases for CMake's compiler test, case-alias symlinks
+  for cppwinrt headers). gdcore_tests pass under Wine; the package installs into the prefix and the Steam
+  Play button runs it via a wrapper launch option (`grimdark-proton.sh %command%`, ignores Steam's command).

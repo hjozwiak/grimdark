@@ -90,9 +90,13 @@ static bool is_bare_stub(void* target) {
   return false;
 }
 static LONG attach_all(std::vector<Hook>& hooks) {
-  DetourTransactionBegin();
-  ThreadUpdater threads;
-  size_t ok = 0;
+  // Resolve every target BEFORE the transaction suspends the process's threads: GetModuleHandleA takes the
+  // loader lock, and at injected start the (still-loading) game thread can be holding it -- resolving between
+  // ThreadUpdater and Commit then deadlocks against the suspended thread (measured under Wine/Proton
+  // 2026-10-31, hanging in the first passes after "version:"; the same race exists on native Windows, just
+  // harder to lose). Inside the transaction we only DetourAttach already-resolved addresses.
+  struct Ready { Hook* h; void* target; };
+  std::vector<Ready> ready;
   for (auto& h : hooks) {
     if (h.ok) continue;
     HMODULE m = GetModuleHandleA(h.dll);
@@ -104,10 +108,17 @@ static LONG attach_all(std::vector<Hook>& hooks) {
     // that is a bare stub, and never attach the same address twice.
     if (is_bare_stub(target)) { log::writef("hook {}: REFUSED, target {} is a shared stub (folded empty body)", h.label, target); continue; }
     if (g_attached_targets.count(target)) { log::writef("hook {}: skipped, target {} already detoured", h.label, target); continue; }
-    *h.orig = target;
+    ready.push_back({&h, target});
+  }
+  DetourTransactionBegin();
+  ThreadUpdater threads;
+  size_t ok = 0;
+  for (auto& rd : ready) {
+    Hook& h = *rd.h;
+    *h.orig = rd.target;
     LONG r = DetourAttach(h.orig, h.detour);
     if (r != NO_ERROR) { log::writef("hook {}: DetourAttach failed {}", h.label, r); *h.orig = nullptr; continue; }
-    h.ok = true; ++ok; g_attached_targets.insert(target);
+    h.ok = true; ++ok; g_attached_targets.insert(rd.target);
   }
   LONG r = DetourTransactionCommit();
   log::writef("hooks: {} attached this pass, commit={}", ok, r);

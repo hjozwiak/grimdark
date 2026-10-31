@@ -1,5 +1,7 @@
 # Unreleased
 
+- Fix: the game could hang forever at startup with the mod loaded (found on Linux, possible anywhere): a startup deadlock while the mod was installing its hooks.
+
 - Experimental Linux support: the launcher now works inside Grim Dawn's Proton prefix. It finds the game through the prefix's Steam records, recognises that Steam is running from Proton's environment instead of wrongly insisting Steam is closed, and no longer overwrites Steam's own launch values. Menus and windows speak through Orca or Speech Dispatcher on the host (Prism's Wine bridges ship in the mod folder; the positional combat voices still need Windows). See "Linux (Proton, experimental)" in the README's Setup for how to start it.
 
 # 0.6.0 (2026-10-26)

@@ -190,23 +190,57 @@ bool install() {
   return ok;
 }
 namespace {
+// check_layout probes exe pages the SteamStub layer may not have restored yet; under Wine an SEH-guarded
+// memcpy fault there was not always delivered to __except (2026-10-31 crash inside check_layout), so these
+// reads are VirtualQuery-checked first and never fault at all.
+bool readable_range(const void* p, size_t n) {
+  auto cur = (const uint8_t*)p;
+  while (n) {
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(cur, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT) return false;
+    DWORD pr = mbi.Protect & 0xff;
+    if (pr == PAGE_NOACCESS || pr == PAGE_EXECUTE || (mbi.Protect & PAGE_GUARD)) return false;
+    size_t avail = (size_t)((const uint8_t*)mbi.BaseAddress + mbi.RegionSize - cur);
+    if (avail >= n) return true;
+    cur += avail; n -= avail;
+  }
+  return true;
+}
 bool check_layout() {
   if (g_checked) return g_available;
-  g_checked = true;
+  // A failed verdict is NOT memoized: under Wine/Proton the two devotion signatures read as zeros at title
+  // time -- those pages are apparently only restored by the SteamStub layer once the code first runs -- so a
+  // later retry can still succeed (2026-10-31). Retries are throttled and log only on a verdict change, so a
+  // genuinely unknown build costs one 14-signature sweep every 2 s, not log spam.
+  static uint64_t s_last_try = 0;
+  uint64_t now = GetTickCount64();
+  if (s_last_try && now - s_last_try < 2000) return false;
+  bool first = s_last_try == 0;
+  s_last_try = now;
   bool ok = g_dm.GetDialogManager && g_dm.GetNumDialog && g_dm.PeekTopDialog && g_dm.AddResponse && g_dm.RemoveTopDialog;
+  bool pending = false;   // a signature page the SteamStub layer has not restored yet (all zeros / unreadable)
   for (size_t i = 0; i < std::size(kSignatures); ++i) {
     const Signature& s = kSignatures[i];
     uint8_t buf[kSignatureMax] = {};
     size_t n = kSignatureLens[i] <= kSignatureMax ? kSignatureLens[i] : kSignatureMax;   // a longer signature overflowed this buffer once (2026-08-22)
-    bool match = s.rva + n <= g_image_size && read_mem((void*)(g_base + s.rva), buf, n) && memcmp(buf, s.bytes, n) == 0;
-    if (!match) { ok = false; log::writef("exe_ui: signature MISMATCH at exe+{:#x} ({})", s.rva, s.what); }
+    bool readable = s.rva + n <= g_image_size && readable_range((void*)(g_base + s.rva), n) && (memcpy(buf, (void*)(g_base + s.rva), n), true);
+    if (readable && memcmp(buf, s.bytes, n) == 0) continue;
+    static const uint8_t kZero[kSignatureMax] = {};
+    bool zeros = memcmp(buf, kZero, n) == 0;   // not a hand loop: clang vectorized one into a stack over-read (2026-10-31)
+    if (zeros) { pending = true; if (first) log::writef("exe_ui: signature pending (zero page) at exe+{:#x} ({})", s.rva, s.what); continue; }
+    ok = false; if (first) log::writef("exe_ui: signature MISMATCH at exe+{:#x} ({})", s.rva, s.what);
   }
   // The button vtables must dispatch HandleMouseEvent (+0x20) to the functions the signatures cover.
-  if (exe_rva(rdp((void*)(g_base + rva::kButtonA1), 0x20)) != 0xa01d0) { ok = false; log::write("exe_ui: button A1 vtable mismatch"); }
-  if (exe_rva(rdp((void*)(g_base + rva::kButtonA2), 0x20)) != 0xa22d0) { ok = false; log::write("exe_ui: button A2 vtable mismatch"); }
+  auto vt_slot = [](uintptr_t vt_rva) -> uintptr_t {
+    void** at = (void**)(g_base + vt_rva + 0x20);
+    return readable_range(at, sizeof(void*)) ? exe_rva(*at) : 0;
+  };
+  if (vt_slot(rva::kButtonA1) != 0xa01d0) { ok = false; if (first) log::write("exe_ui: button A1 vtable mismatch"); }
+  if (vt_slot(rva::kButtonA2) != 0xa22d0) { ok = false; if (first) log::write("exe_ui: button A2 vtable mismatch"); }
   g_available = ok;
-  g_version = g_version.substr(0, g_version.find(" layout=")) + (ok ? " layout=ok" : " layout=MISMATCH");
-  log::writef("exe_ui: {}", g_version);
+  g_checked = ok && !pending;   // pending pages keep the retry alive until they materialize and verify
+  std::string line = g_version.substr(0, g_version.find(" layout=")) + (!ok ? " layout=MISMATCH" : pending ? " layout=ok-pending" : " layout=ok");
+  if (line != g_version) { g_version = line; log::writef("exe_ui: {}", g_version); }
   return ok;
 }
 }  // namespace

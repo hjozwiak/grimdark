@@ -1364,3 +1364,11 @@ true)` then the drop or (after our own no/yes picker) the destroy. Verified live
   (INCLUDE/LIB env, llvm-rc for RC, /EHsc, debug-CRT aliases for CMake's compiler test, case-alias symlinks
   for cppwinrt headers). gdcore_tests pass under Wine; the package installs into the prefix and the Steam
   Play button runs it via a wrapper launch option (`grimdark-proton.sh %command%`, ignores Steam's command).
+- Follow-up the same evening: with menus live, the two devotion signatures (DevotionWindow ctor,
+  Star::HandleMouseEvent) read as committed-but-zero image pages at title time under Wine -- the SteamStub
+  layer restores that block lazily -- so exe_ui declared layout=MISMATCH and menus stayed silent. check_layout
+  now treats an all-zero/unreadable signature page as "pending", not a mismatch: the layout counts as
+  available, the verdict is not finalized, and a throttled retry re-verifies until the pages materialize
+  (they do: later runs end layout=ok). Its probes are VirtualQuery-guarded instead of SEH memcpy, which Wine
+  did not deliver to __except for one fault; and the zero test is memcmp, after clang vectorized a hand loop
+  into a stack over-read that crashed check_layout twice. Nonzero wrong bytes are still a hard mismatch.

@@ -51,3 +51,6 @@ __pycache__/
 
 # player zip + pdb from tools/package.py
 dist/
+
+# graphify extraction cache (graphify-out/graph.json + GRAPH_REPORT.md are the shareable outputs)
+graphify-out/cache/

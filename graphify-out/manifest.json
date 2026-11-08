@@ -2956,11 +2956,5 @@
     "seen": 1793507071.5307643,
     "ast_hash": "b3947b9c5242f7d7b5f409574ffde9b9",
     "semantic_hash": "b3947b9c5242f7d7b5f409574ffde9b9"
-  },
-  ".agents/skill-drafts/accessibility-mod-practices/SKILL.md": {
-    "mtime": 1793505509.7658813,
-    "seen": 1793507071.5306926,
-    "ast_hash": "89c59c4ca0a1e5c988b2656ae906adbb",
-    "semantic_hash": "89c59c4ca0a1e5c988b2656ae906adbb"
   }
 }

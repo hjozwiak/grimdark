@@ -388,3 +388,16 @@ developer's screen reader. Client: `uv run tools/gd.py <cmd>` (add `--with pillo
   the scripts are for and is expected -- but ask first unless the user has made approval clear for this stretch
   of work (an explicit "go ahead", or an ongoing task the user handed over). If the user is at the keyboard in
   the game, do not launch, kill, inject or send input; if Claude owns it, the user will say before taking over.
+
+## Graphify (local, added 2026-10-31)
+
+This repo has a local Graphify knowledge graph in `graphify-out/` (`graph.json`, `GRAPH_REPORT.md`), built with
+the on-machine `graphify` CLI (paru `graphify-bin`) -- not the hosted service. For questions about code structure,
+callers, dependencies, or the impact of a change, query the graph before grep or reading files one by one:
+`graphify query "<words>"`, `graphify path "A" "B"`, `graphify explain "X"`, `graphify affected "X"`,
+`graphify god-nodes`; or the local MCP tools (`query_graph`, `get_node`, `shortest_path`, ...) when the
+`graphify` MCP server is connected. Use grep for exact strings, such as error messages or config keys. Refresh
+after code changes with `graphify update .` (git hooks installed by `graphify hook install` also rebuild). The
+graph covers the whole repo including vendored `third_party/`, which dominates node counts -- weight `src/`,
+`tools/` and `docs/` results over vendored ones. If a Graphify command fails or the graph is stale, say so,
+then fall back to grep.

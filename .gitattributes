@@ -2,3 +2,4 @@
 data/rooms/**/*.jsonl text eol=lf
 data/rooms/**/*.json text eol=lf
 data/rooms/**/*.bin binary
+graphify-out/graph.json merge=graphify
